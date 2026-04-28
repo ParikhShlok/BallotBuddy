@@ -1,3 +1,42 @@
+/**
+ * BallotBuddy election planning logic module.
+ * Contains all decision-making, scoring, and plan generation logic.
+ * @module logic
+ */
+
+import {
+  DAY_MS,
+  DEFAULT_DAYS_UNTIL_ELECTION,
+  MAX_DAYS_UNTIL_ELECTION,
+  READINESS_THRESHOLDS,
+  READINESS_PENALTIES,
+  URGENCY_THRESHOLDS,
+  MAX_MILESTONES,
+  MAX_CALENDAR_LINKS,
+  MAX_QUICK_LINKS,
+  MAX_TOP_ACTIONS,
+  CALENDAR_EVENT_DURATION_MS,
+  CALENDAR_DEFAULT_START_HOUR,
+  ELECTION_DAY_START_HOUR,
+  ELECTION_DAY_DURATION_HOURS,
+  VOTING_METHODS,
+  REGISTRATION_STATUSES,
+  ACCESSIBILITY_NEEDS,
+  AGE_GROUPS,
+  MAIN_CONCERNS
+} from "./constants.js";
+
+import { validateFormData } from "./validation.js";
+
+import {
+  uniqueItems,
+  formatCalendarDate,
+  formatRelativeMilestoneDate,
+  createDateAtHour,
+  formatVotingMethod
+} from "./utils.js";
+
+/** Map of user concerns to insight messages. */
 const concernMap = {
   deadlines: "You care most about timing, so the plan prioritizes the next critical cutoff.",
   id_rules: "You flagged document uncertainty, so the checklist highlights identity and verification prep.",
@@ -6,82 +45,213 @@ const concernMap = {
   confidence: "You want the whole process explained clearly, so the assistant adds more context and confidence-building guidance."
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-export function buildElectionPlan(formData) {
-  const daysLeft = normalizeNumber(formData.daysUntilElection, 21);
-  const name = formData.name?.trim() || "Voter";
-  const checklist = [];
-  const timeline = [];
-  const risks = [];
-  const googleSuggestions = [];
-  const persona = resolvePersona(formData);
+/**
+ * Builds a complete election plan based on user form data.
+ * @param {Object} rawFormData - Raw form data from the UI.
+ * @returns {Object} Complete election plan object.
+ */
+export function buildElectionPlan(rawFormData) {
+  const formData = validateFormData(rawFormData);
+  const daysLeft = formData.daysUntilElection;
+  const name = formData.name || "Voter";
   const electionDate = new Date(Date.now() + daysLeft * DAY_MS);
 
-  checklist.push("Confirm your voter status for your current address so you start from verified information.");
-  timeline.push("Today: verify registration, election date, and the voting method you intend to use.");
+  const persona = resolvePersona(formData);
+  const checklist = buildChecklist(formData, daysLeft);
+  const timeline = buildTimeline(formData, daysLeft);
+  const risks = buildRisks(formData, daysLeft);
+  const googleSuggestions = buildGoogleSuggestions(formData);
 
-  if (formData.registrationStatus !== "registered") {
+  const readiness = buildReadinessModel({
+    formData,
+    daysLeft,
+    checklist,
+    risks
+  });
+
+  const milestones = buildMilestones({
+    formData,
+    daysLeft,
+    electionDate,
+    checklist
+  });
+
+  const calendarLinks = formData.wantsReminders === "on"
+    ? buildCalendarLinks({ name, milestones, electionDate })
+    : [];
+
+  const quickLinks = buildGoogleQuickLinks({
+    address: formData.address,
+    mainConcern: formData.mainConcern,
+    accessibilityNeed: formData.accessibilityNeed,
+    electionDate,
+    name
+  });
+
+  const generatedCard = buildGeneratedCard({
+    name,
+    formData,
+    persona,
+    readiness,
+    checklist,
+    milestones,
+    quickLinks
+  });
+
+  return {
+    name,
+    persona,
+    summary: `${name}, your assistant identified you as a ${persona.label}. ${persona.description}`,
+    checklist,
+    timeline,
+    risks,
+    googleSuggestions,
+    narrative: buildNarrative({ name, persona, daysLeft, formData }),
+    concernInsight: concernMap[formData.mainConcern] || concernMap.confidence,
+    readiness,
+    milestones,
+    calendarLinks,
+    quickLinks,
+    generatedCard
+  };
+}
+
+/**
+ * Builds the prioritized checklist based on user context.
+ * @param {Object} formData - Validated form data.
+ * @param {number} daysLeft - Days until election.
+ * @returns {string[]} Prioritized checklist items.
+ */
+function buildChecklist(formData, daysLeft) {
+  const checklist = [];
+
+  checklist.push("Confirm your voter status for your current address so you start from verified information.");
+
+  if (formData.registrationStatus !== REGISTRATION_STATUSES.REGISTERED) {
     checklist.unshift("Check registration immediately and complete registration if your state still allows it.");
-    risks.push(daysLeft <= 14
-      ? "Registration may already be close to the deadline or closed in some regions."
-      : "Registration rules vary by state, so leaving this for later could block voting.");
   } else {
     checklist.push("Review your registration record once more to make sure your address and district are correct.");
   }
 
   if (formData.movedRecently === "yes") {
     checklist.push("Update or confirm your address because moving can change your district, ballot, and polling location.");
-    timeline.push(daysLeft <= 10
-      ? "Within 24 hours: resolve any address mismatch before you make other voting plans."
-      : "This week: confirm whether your move requires a new registration or an address correction.");
-    risks.push("A recent move is one of the biggest reasons people show up at the wrong polling place.");
   }
 
-  if (formData.votingMethod === "mail") {
+  if (formData.votingMethod === VOTING_METHODS.MAIL) {
     checklist.push("Request or confirm your mail ballot and set a personal return deadline earlier than the official deadline.");
     checklist.push("Track your ballot status after mailing or dropping it off.");
-    timeline.push(daysLeft <= 7
-      ? "Right now: if mail timing looks risky, switch to an official drop box or in-person backup plan."
-      : "Before the final week: receive, complete, seal, and return your ballot with tracking.");
-    risks.push("Mail voting fails most often when voters request or return the ballot too late.");
   }
 
-  if (formData.votingMethod === "early") {
+  if (formData.votingMethod === VOTING_METHODS.EARLY) {
     checklist.push("Look up early-voting dates and choose a lower-stress day before election day crowds build.");
-    timeline.push("Before election day: attend early voting with ID and confirmation details if required.");
   }
 
-  if (formData.votingMethod === "in_person") {
+  if (formData.votingMethod === VOTING_METHODS.IN_PERSON) {
     checklist.push("Prepare what you need for election day: ID if required, polling location, and travel time buffer.");
-    timeline.push("Election day minus 1 day: double-check polling hours, route, and backup transport.");
   }
 
-  if (formData.accessibilityNeed !== "none") {
+  if (formData.accessibilityNeed !== ACCESSIBILITY_NEEDS.NONE) {
     checklist.push("Contact your local election office early to confirm accessible equipment, language help, or curbside options.");
-    risks.push("Accessibility support is available in many places, but it works best when arranged before the last minute.");
   }
 
-  if (formData.ageGroup === "18_24") {
+  if (formData.ageGroup === AGE_GROUPS.YOUNG) {
     checklist.push("Review first-time voter rules carefully because ID, signature, or residency proof may be different for new voters.");
   }
 
-  if (formData.ageGroup === "65_plus") {
+  if (formData.ageGroup === AGE_GROUPS.SENIOR) {
     checklist.push("Choose the least stressful voting path early, especially if transport, queues, or energy levels matter.");
   }
 
-  if (daysLeft <= 14) {
+  checklist.push("Save the final checklist on your phone so you can act without re-reading the full guide later.");
+
+  return uniqueItems(checklist);
+}
+
+/**
+ * Builds the action timeline based on user context.
+ * @param {Object} formData - Validated form data.
+ * @param {number} daysLeft - Days until election.
+ * @returns {string[]} Timeline items.
+ */
+function buildTimeline(formData, daysLeft) {
+  const timeline = [];
+
+  timeline.push("Today: verify registration, election date, and the voting method you intend to use.");
+
+  if (formData.movedRecently === "yes") {
+    timeline.push(daysLeft <= 10
+      ? "Within 24 hours: resolve any address mismatch before you make other voting plans."
+      : "This week: confirm whether your move requires a new registration or an address correction.");
+  }
+
+  if (formData.votingMethod === VOTING_METHODS.MAIL) {
+    timeline.push(daysLeft <= 7
+      ? "Right now: if mail timing looks risky, switch to an official drop box or in-person backup plan."
+      : "Before the final week: receive, complete, seal, and return your ballot with tracking.");
+  }
+
+  if (formData.votingMethod === VOTING_METHODS.EARLY) {
+    timeline.push("Before election day: attend early voting with ID and confirmation details if required.");
+  }
+
+  if (formData.votingMethod === VOTING_METHODS.IN_PERSON) {
+    timeline.push("Election day minus 1 day: double-check polling hours, route, and backup transport.");
+  }
+
+  if (daysLeft <= URGENCY_THRESHOLDS.VERY_CLOSE) {
     timeline.push("Within 48 hours: finish every step that could stop you from voting, including registration, address, and ballot requests.");
-    risks.push("You are in a late-stage window, so every unresolved item should be treated as urgent.");
-  } else if (daysLeft <= 30) {
+  } else if (daysLeft <= URGENCY_THRESHOLDS.CLOSE) {
     timeline.push("Within 7 days: complete all setup tasks so the last week is only for confirmation and voting.");
   } else {
     timeline.push("Over the next 2 weeks: complete setup early and use the final week only for verification.");
   }
 
-  checklist.push("Save the final checklist on your phone so you can act without re-reading the full guide later.");
+  return uniqueItems(timeline);
+}
 
-  googleSuggestions.push(
+/**
+ * Builds risk warnings based on user context.
+ * @param {Object} formData - Validated form data.
+ * @param {number} daysLeft - Days until election.
+ * @returns {string[]} Risk warning items.
+ */
+function buildRisks(formData, daysLeft) {
+  const risks = [];
+
+  if (formData.registrationStatus !== REGISTRATION_STATUSES.REGISTERED) {
+    risks.push(daysLeft <= 14
+      ? "Registration may already be close to the deadline or closed in some regions."
+      : "Registration rules vary by state, so leaving this for later could block voting.");
+  }
+
+  if (formData.movedRecently === "yes") {
+    risks.push("A recent move is one of the biggest reasons people show up at the wrong polling place.");
+  }
+
+  if (formData.votingMethod === VOTING_METHODS.MAIL) {
+    risks.push("Mail voting fails most often when voters request or return the ballot too late.");
+  }
+
+  if (formData.accessibilityNeed !== ACCESSIBILITY_NEEDS.NONE) {
+    risks.push("Accessibility support is available in many places, but it works best when arranged before the last minute.");
+  }
+
+  if (daysLeft <= URGENCY_THRESHOLDS.VERY_CLOSE) {
+    risks.push("You are in a late-stage window, so every unresolved item should be treated as urgent.");
+  }
+
+  return risks.length
+    ? uniqueItems(risks)
+    : ["No major blockers were detected yet, but you should still verify official local rules and deadlines."];
+}
+
+/**
+ * Builds Google service suggestions based on user context.
+ * @param {Object} formData - Validated form data.
+ * @returns {Object[]} Google suggestion objects.
+ */
+function buildGoogleSuggestions(formData) {
+  const suggestions = [
     {
       title: "Google Civic Information API",
       body: "Look up elections, polling locations, and official voting data from an address when an API key is available."
@@ -94,72 +264,25 @@ export function buildElectionPlan(formData) {
       title: "Google Calendar",
       body: "Turn the checklist into reminders for registration, ballot return, and election day travel."
     }
-  );
+  ];
 
-  if (formData.accessibilityNeed === "language") {
-    googleSuggestions.push({
+  if (formData.accessibilityNeed === ACCESSIBILITY_NEEDS.LANGUAGE) {
+    suggestions.push({
       title: "Google Translate",
       body: "Support multilingual guidance for key instructions and official election information."
     });
   }
 
-  const normalizedChecklist = uniqueItems(checklist);
-  const normalizedTimeline = uniqueItems(timeline);
-  const normalizedRisks = uniqueItems(
-    risks.length ? risks : ["No major blockers were detected yet, but you should still verify official local rules and deadlines."]
-  );
-  const readiness = buildReadinessModel({
-    formData,
-    daysLeft,
-    checklist: normalizedChecklist,
-    risks: normalizedRisks
-  });
-  const milestones = buildMilestones({
-    formData,
-    daysLeft,
-    electionDate,
-    checklist: normalizedChecklist
-  });
-  const calendarLinks = formData.wantsReminders === "on"
-    ? buildCalendarLinks({ name, milestones, electionDate })
-    : [];
-  const quickLinks = buildGoogleQuickLinks({
-    address: formData.address,
-    mainConcern: formData.mainConcern,
-    accessibilityNeed: formData.accessibilityNeed,
-    electionDate,
-    name
-  });
-  const generatedCard = buildGeneratedCard({
-    name,
-    formData,
-    persona,
-    readiness,
-    checklist: normalizedChecklist,
-    milestones,
-    quickLinks
-  });
-
-  return {
-    name,
-    persona,
-    summary: `${name}, your assistant identified you as a ${persona.label}. ${persona.description}`,
-    checklist: normalizedChecklist,
-    timeline: normalizedTimeline,
-    risks: normalizedRisks,
-    googleSuggestions,
-    narrative: buildNarrative({ name, persona, daysLeft, formData }),
-    concernInsight: concernMap[formData.mainConcern] || concernMap.confidence,
-    readiness,
-    milestones,
-    calendarLinks,
-    quickLinks,
-    generatedCard
-  };
+  return suggestions;
 }
 
+/**
+ * Resolves the user's persona based on form data.
+ * @param {Object} formData - Validated form data.
+ * @returns {Object} Persona object with key, label, and description.
+ */
 export function resolvePersona(formData) {
-  if (formData.accessibilityNeed !== "none") {
+  if (formData.accessibilityNeed !== ACCESSIBILITY_NEEDS.NONE) {
     return {
       key: "accessibility",
       label: "voter needing accessible support",
@@ -167,7 +290,7 @@ export function resolvePersona(formData) {
     };
   }
 
-  if (formData.votingMethod === "mail") {
+  if (formData.votingMethod === VOTING_METHODS.MAIL) {
     return {
       key: "absentee",
       label: "mail or absentee voter",
@@ -183,7 +306,7 @@ export function resolvePersona(formData) {
     };
   }
 
-  if (formData.ageGroup === "18_24" || formData.registrationStatus !== "registered") {
+  if (formData.ageGroup === AGE_GROUPS.YOUNG || formData.registrationStatus !== REGISTRATION_STATUSES.REGISTERED) {
     return {
       key: "first_time",
       label: "first-time or uncertain voter",
@@ -198,14 +321,25 @@ export function resolvePersona(formData) {
   };
 }
 
+/**
+ * Builds a Google Maps search link from an address.
+ * @param {string} address - Raw address string.
+ * @returns {string} Google Maps URL or empty string.
+ */
 export function buildMapsLink(address) {
   if (!address?.trim()) {
     return "";
   }
-
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`;
 }
 
+/**
+ * Answers an election-related question based on the current plan.
+ * @param {string} question - User's question.
+ * @param {Object} plan - Current election plan.
+ * @param {Object} formData - Validated form data.
+ * @returns {string} Answer text.
+ */
 export function answerElectionQuestion(question, plan, formData) {
   const normalized = (question || "").toLowerCase();
 
@@ -236,14 +370,14 @@ export function answerElectionQuestion(question, plan, formData) {
   }
 
   if (normalized.includes("mail") || normalized.includes("absentee")) {
-    return formData.votingMethod === "mail"
+    return formData.votingMethod === VOTING_METHODS.MAIL
       ? "Because you chose mail voting, request or confirm the ballot immediately, return it early, and track it after sending."
       : "You are not currently on the mail-voting path, but you could switch if your local rules allow it and timing still works.";
   }
 
   if (normalized.includes("where") || normalized.includes("location") || normalized.includes("polling")) {
     return formData.address?.trim()
-      ? `Use the Google Maps link in your summary for your area, then verify your official polling place through your local election office.`
+      ? "Use the Google Maps link in your summary for your area, then verify your official polling place through your local election office."
       : "Add your address or ZIP code so the assistant can give you a location-aware voting plan and Maps link.";
   }
 
@@ -252,13 +386,13 @@ export function answerElectionQuestion(question, plan, formData) {
   }
 
   if (normalized.includes("election day") || normalized.includes("prepare") || normalized.includes("voting day")) {
-    return formData.votingMethod === "in_person"
+    return formData.votingMethod === VOTING_METHODS.IN_PERSON
       ? "Before election day, confirm polling hours, route, transport backup, and any ID you may need. Save the address on your phone so you can leave without friction."
       : "Even if you are not voting in person, keep a backup plan in case your original method becomes risky close to the deadline.";
   }
 
   if (normalized.includes("accessibility") || normalized.includes("language") || normalized.includes("help")) {
-    return formData.accessibilityNeed !== "none"
+    return formData.accessibilityNeed !== ACCESSIBILITY_NEEDS.NONE
       ? "Because you flagged a support need, contact your local election office early to confirm the exact accommodation available at your location."
       : "If you need mobility, vision, or language support, update your form selection and the assistant will adapt your checklist.";
   }
@@ -266,16 +400,25 @@ export function answerElectionQuestion(question, plan, formData) {
   return `${plan.narrative} Your strongest next move is: ${plan.checklist[0]}`;
 }
 
+/**
+ * Builds a narrative explanation for the user.
+ * @param {Object} params - Parameters object.
+ * @param {string} params.name - User's name.
+ * @param {Object} params.persona - Resolved persona.
+ * @param {number} params.daysLeft - Days until election.
+ * @param {Object} params.formData - Validated form data.
+ * @returns {string} Narrative text.
+ */
 function buildNarrative({ name, persona, daysLeft, formData }) {
-  const urgency = daysLeft <= 7
+  const urgency = daysLeft <= URGENCY_THRESHOLDS.VERY_CLOSE
     ? "This is a high-urgency situation, so the assistant is pushing you toward actions you can complete immediately."
-    : daysLeft <= 21
+    : daysLeft <= URGENCY_THRESHOLDS.CLOSE
       ? "There is still enough time, but only if you handle the key administrative steps now."
       : "You have useful runway, which means you can build a safer plan instead of reacting at the last minute.";
 
-  const votingPath = formData.votingMethod === "mail"
+  const votingPath = formData.votingMethod === VOTING_METHODS.MAIL
     ? "Because you prefer voting by mail, the biggest goal is to remove delivery and return risk."
-    : formData.votingMethod === "early"
+    : formData.votingMethod === VOTING_METHODS.EARLY
       ? "Because you prefer early voting, the assistant is trying to shift your effort earlier and reduce election day pressure."
       : "Because you prefer voting in person, the assistant is optimizing for preparation, location certainty, and a smooth voting-day experience.";
 
@@ -287,65 +430,69 @@ function buildNarrative({ name, persona, daysLeft, formData }) {
   ].join(" ");
 }
 
-function normalizeNumber(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function uniqueItems(items) {
-  return [...new Set(items)];
-}
-
+/**
+ * Builds the readiness scoring model.
+ * @param {Object} params - Parameters object.
+ * @param {Object} params.formData - Validated form data.
+ * @param {number} params.daysLeft - Days until election.
+ * @param {string[]} params.checklist - Checklist items.
+ * @param {string[]} params.risks - Risk items.
+ * @returns {Object} Readiness model with score, band, blockers, summary, and riskCount.
+ */
 function buildReadinessModel({ formData, daysLeft, checklist, risks }) {
   let score = 100;
   const blockers = [];
 
-  if (formData.registrationStatus === "not_registered") {
-    score -= 32;
+  if (formData.registrationStatus === REGISTRATION_STATUSES.NOT_REGISTERED) {
+    score -= READINESS_PENALTIES.NOT_REGISTERED;
     blockers.push("Registration is still unresolved.");
-  } else if (formData.registrationStatus !== "registered") {
-    score -= 20;
+  } else if (formData.registrationStatus !== REGISTRATION_STATUSES.REGISTERED) {
+    score -= READINESS_PENALTIES.UNKNOWN_REGISTRATION;
     blockers.push("Registration status still needs verification.");
   }
 
   if (formData.movedRecently === "yes") {
-    score -= 14;
+    score -= READINESS_PENALTIES.MOVED_RECENTLY;
     blockers.push("A recent move can invalidate the address on file.");
   }
 
-  if (formData.votingMethod === "mail") {
-    score -= daysLeft <= 7 ? 18 : 10;
+  if (formData.votingMethod === VOTING_METHODS.MAIL) {
+    score -= daysLeft <= URGENCY_THRESHOLDS.VERY_CLOSE
+      ? READINESS_PENALTIES.MAIL_VOTING_LATE
+      : READINESS_PENALTIES.MAIL_VOTING_EARLY;
     blockers.push("Mail voting depends on faster turnaround and ballot tracking.");
   }
 
-  if (formData.accessibilityNeed !== "none") {
-    score -= daysLeft <= 14 ? 14 : 8;
+  if (formData.accessibilityNeed !== ACCESSIBILITY_NEEDS.NONE) {
+    score -= daysLeft <= URGENCY_THRESHOLDS.CLOSE
+      ? READINESS_PENALTIES.ACCESSIBILITY_LATE
+      : READINESS_PENALTIES.ACCESSIBILITY_EARLY;
     blockers.push("Accommodation details should be confirmed ahead of time.");
   }
 
   if (!formData.address?.trim()) {
-    score -= 8;
+    score -= READINESS_PENALTIES.MISSING_ADDRESS;
     blockers.push("Location details are missing, so polling logistics are less reliable.");
   }
 
-  if (daysLeft <= 7) {
-    score -= 18;
+  if (daysLeft <= URGENCY_THRESHOLDS.VERY_CLOSE) {
+    score -= READINESS_PENALTIES.ELECTION_VERY_CLOSE;
     blockers.push("The election is very close, so delays matter more.");
-  } else if (daysLeft <= 14) {
-    score -= 12;
-  } else if (daysLeft <= 30) {
-    score -= 6;
+  } else if (daysLeft <= URGENCY_THRESHOLDS.CLOSE) {
+    score -= READINESS_PENALTIES.ELECTION_CLOSE;
+  } else if (daysLeft <= URGENCY_THRESHOLDS.MODERATE) {
+    score -= READINESS_PENALTIES.ELECTION_MODERATE;
   }
 
-  score = Math.max(18, Math.min(98, score));
+  score = Math.max(READINESS_THRESHOLDS.MINIMUM, Math.min(98, score));
 
-  const band = score >= 80
+  const band = score >= READINESS_THRESHOLDS.STRONG
     ? {
         label: "Strong",
         tone: "good",
         description: "You are in good shape, with most risk coming from final confirmation."
       }
-    : score >= 60
+    : score >= READINESS_THRESHOLDS.NEEDS_ATTENTION
       ? {
           label: "Needs attention",
           tone: "watch",
@@ -366,6 +513,15 @@ function buildReadinessModel({ formData, daysLeft, checklist, risks }) {
   };
 }
 
+/**
+ * Builds milestone items for the user's plan.
+ * @param {Object} params - Parameters object.
+ * @param {Object} params.formData - Validated form data.
+ * @param {number} params.daysLeft - Days until election.
+ * @param {Date} params.electionDate - Calculated election date.
+ * @param {string[]} params.checklist - Checklist items.
+ * @returns {Object[]} Milestone objects.
+ */
 function buildMilestones({ formData, daysLeft, electionDate, checklist }) {
   const items = [];
 
@@ -376,7 +532,7 @@ function buildMilestones({ formData, daysLeft, electionDate, checklist }) {
     detail: checklist[0] || "Confirm registration, address, and election details."
   });
 
-  if (formData.registrationStatus !== "registered") {
+  if (formData.registrationStatus !== REGISTRATION_STATUSES.REGISTERED) {
     items.push({
       title: "Resolve registration status",
       timingLabel: daysLeft <= 14 ? "Within 24 hours" : "This week",
@@ -385,14 +541,14 @@ function buildMilestones({ formData, daysLeft, electionDate, checklist }) {
     });
   }
 
-  if (formData.votingMethod === "mail") {
+  if (formData.votingMethod === VOTING_METHODS.MAIL) {
     items.push({
       title: "Return or track ballot",
       timingLabel: daysLeft <= 7 ? "Right now" : "Before the final week",
       offsetDays: daysLeft <= 7 ? daysLeft : 7,
       detail: "Use a safer return path and check tracking rather than waiting until the deadline."
     });
-  } else if (formData.votingMethod === "early") {
+  } else if (formData.votingMethod === VOTING_METHODS.EARLY) {
     items.push({
       title: "Choose your early-voting window",
       timingLabel: "Before election week",
@@ -417,7 +573,7 @@ function buildMilestones({ formData, daysLeft, electionDate, checklist }) {
     });
   }
 
-  if (formData.accessibilityNeed !== "none") {
+  if (formData.accessibilityNeed !== ACCESSIBILITY_NEEDS.NONE) {
     items.push({
       title: "Confirm accommodations",
       timingLabel: daysLeft <= 14 ? "This week" : "2 weeks before election day",
@@ -434,19 +590,27 @@ function buildMilestones({ formData, daysLeft, electionDate, checklist }) {
   });
 
   return items
-    .slice(0, 4)
+    .slice(0, MAX_MILESTONES)
     .map((item) => ({
       ...item,
       dateLabel: formatRelativeMilestoneDate(electionDate, item.offsetDays)
     }));
 }
 
+/**
+ * Builds Google Calendar reminder links from milestones.
+ * @param {Object} params - Parameters object.
+ * @param {string} params.name - User's name.
+ * @param {Object[]} params.milestones - Milestone items.
+ * @param {Date} params.electionDate - Election date.
+ * @returns {Object[]} Calendar link objects.
+ */
 function buildCalendarLinks({ name, milestones, electionDate }) {
-  return milestones.slice(0, 3).map((item, index) => {
+  return milestones.slice(0, MAX_CALENDAR_LINKS).map((item, index) => {
     const eventDate = new Date(electionDate.getTime() - item.offsetDays * DAY_MS);
-    eventDate.setHours(9 + index, 0, 0, 0);
+    eventDate.setHours(CALENDAR_DEFAULT_START_HOUR + index, 0, 0, 0);
 
-    const endDate = new Date(eventDate.getTime() + 60 * 60 * 1000);
+    const endDate = new Date(eventDate.getTime() + CALENDAR_EVENT_DURATION_MS);
     const title = `${item.title} for ${name}`;
     const details = `${item.detail} BallotBuddy milestone: ${item.timingLabel}.`;
 
@@ -463,6 +627,16 @@ function buildCalendarLinks({ name, milestones, electionDate }) {
   });
 }
 
+/**
+ * Builds Google quick action links.
+ * @param {Object} params - Parameters object.
+ * @param {string} params.address - User's address.
+ * @param {string} params.mainConcern - Main concern key.
+ * @param {string} params.accessibilityNeed - Accessibility need key.
+ * @param {Date} params.electionDate - Election date.
+ * @param {string} params.name - User's name.
+ * @returns {Object[]} Quick link objects.
+ */
 function buildGoogleQuickLinks({ address, mainConcern, accessibilityNeed, electionDate, name }) {
   const trimmedAddress = address?.trim();
   const formattedElectionDate = new Intl.DateTimeFormat("en-US", {
@@ -470,9 +644,11 @@ function buildGoogleQuickLinks({ address, mainConcern, accessibilityNeed, electi
     day: "numeric",
     year: "numeric"
   }).format(electionDate);
+
   const officialSearchQuery = trimmedAddress
     ? `${trimmedAddress} official election office polling place`
-    : `official election office polling place voter guide`;
+    : "official election office polling place voter guide";
+
   const quickLinks = [
     {
       title: "Search official local election info",
@@ -495,12 +671,12 @@ function buildGoogleQuickLinks({ address, mainConcern, accessibilityNeed, electi
     href: buildGoogleCalendarLink({
       title: `Election day for ${name}`,
       details: "Block time for voting, route checks, and final document review.",
-      startDate: createDateAtHour(electionDate, 8),
-      endDate: createDateAtHour(electionDate, 9)
+      startDate: createDateAtHour(electionDate, ELECTION_DAY_START_HOUR),
+      endDate: createDateAtHour(electionDate, ELECTION_DAY_START_HOUR + ELECTION_DAY_DURATION_HOURS)
     })
   });
 
-  if (accessibilityNeed === "language") {
+  if (accessibilityNeed === ACCESSIBILITY_NEEDS.LANGUAGE) {
     quickLinks.push({
       title: "Translate key voting instructions",
       body: "Open Google Translate to help review official voting instructions in another language.",
@@ -508,7 +684,7 @@ function buildGoogleQuickLinks({ address, mainConcern, accessibilityNeed, electi
     });
   }
 
-  if (mainConcern === "where_to_vote") {
+  if (mainConcern === MAIN_CONCERNS.WHERE_TO_VOTE) {
     quickLinks.push({
       title: "Search polling place updates",
       body: "Use Google Search to confirm any location or hours changes close to election day.",
@@ -516,9 +692,18 @@ function buildGoogleQuickLinks({ address, mainConcern, accessibilityNeed, electi
     });
   }
 
-  return quickLinks.slice(0, 4);
+  return quickLinks.slice(0, MAX_QUICK_LINKS);
 }
 
+/**
+ * Builds a Google Calendar event link.
+ * @param {Object} params - Parameters object.
+ * @param {string} params.title - Event title.
+ * @param {string} params.details - Event details.
+ * @param {Date} params.startDate - Start date.
+ * @param {Date} params.endDate - End date.
+ * @returns {string} Google Calendar URL.
+ */
 function buildGoogleCalendarLink({ title, details, startDate, endDate }) {
   const params = new URLSearchParams({
     action: "TEMPLATE",
@@ -530,6 +715,18 @@ function buildGoogleCalendarLink({ title, details, startDate, endDate }) {
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
+/**
+ * Builds the generated voter action card.
+ * @param {Object} params - Parameters object.
+ * @param {string} params.name - User's name.
+ * @param {Object} params.formData - Validated form data.
+ * @param {Object} params.persona - Resolved persona.
+ * @param {Object} params.readiness - Readiness model.
+ * @param {string[]} params.checklist - Checklist items.
+ * @param {Object[]} params.milestones - Milestone items.
+ * @param {Object[]} params.quickLinks - Quick link items.
+ * @returns {Object} Generated card object.
+ */
 function buildGeneratedCard({ name, formData, persona, readiness, checklist, milestones, quickLinks }) {
   return {
     title: `${name}'s BallotBuddy card`,
@@ -539,7 +736,7 @@ function buildGeneratedCard({ name, formData, persona, readiness, checklist, mil
     readinessTone: readiness.band.label,
     votingMethod: formatVotingMethod(formData.votingMethod),
     priorityLine: checklist[0] || "Review your plan and confirm the next required step.",
-    topActions: checklist.slice(0, 3),
+    topActions: checklist.slice(0, MAX_TOP_ACTIONS),
     milestoneLine: milestones[0]
       ? `${milestones[0].title} - ${milestones[0].timingLabel}`
       : "No milestone generated yet.",
@@ -547,40 +744,3 @@ function buildGeneratedCard({ name, formData, persona, readiness, checklist, mil
   };
 }
 
-function formatCalendarDate(date) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  const hours = String(date.getUTCHours()).padStart(2, "0");
-  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
-  const seconds = String(date.getUTCSeconds()).padStart(2, "0");
-
-  return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
-}
-
-function formatRelativeMilestoneDate(electionDate, offsetDays) {
-  const date = new Date(electionDate.getTime() - offsetDays * DAY_MS);
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric"
-  }).format(date);
-}
-
-function createDateAtHour(date, hour) {
-  const nextDate = new Date(date);
-  nextDate.setHours(hour, 0, 0, 0);
-  return nextDate;
-}
-
-function formatVotingMethod(method) {
-  if (method === "mail") {
-    return "Mail / absentee";
-  }
-
-  if (method === "early") {
-    return "Early voting";
-  }
-
-  return "In person";
-}

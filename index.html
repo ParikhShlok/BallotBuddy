@@ -1,8 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com; frame-src https://calendar.google.com https://translate.google.com;">
+  <meta name="description" content="BallotBuddy - A personalized election journey assistant for voters.">
   <title>BallotBuddy | Election Journey Assistant</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -10,236 +12,319 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a href="#planner" class="skip-link">Skip to main content</a>
+
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <div id="sr-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
   <div class="page-shell">
-    <header class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">Challenge Vertical: Civic Guidance Assistant</p>
-        <h1>BallotBuddy helps people understand exactly what to do before election day.</h1>
-        <p class="hero-text">
-          A personalized election assistant for first-time voters, people who moved recently,
-          absentee voters, and users who need accessibility support.
-        </p>
-        <div class="hero-actions">
-          <a class="primary-link" href="#planner">Plan my path</a>
-          <a class="secondary-link" href="#google-services">Google services</a>
+    <header class="site-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">BB</span>
+        <div>
+          <strong>BallotBuddy</strong>
+          <span class="brand-tagline">Election Journey Assistant</span>
         </div>
       </div>
-      <div class="hero-panel">
+      <nav class="top-nav" aria-label="Primary navigation">
+        <a href="#planner">Planner</a>
+        <a href="#google-services">Google tools</a>
+        <a href="#risks">Risks</a>
+      </nav>
+    </header>
+
+    <section class="hero" aria-labelledby="hero-heading">
+      <div class="hero-copy">
+        <p class="eyebrow">Civic guidance with clarity</p>
+        <h1 id="hero-heading">Navigate election day with a plan you can trust.</h1>
+        <p class="hero-text">
+          BallotBuddy transforms your voting situation into a clear action plan, deadline tracker,
+          and ready-to-use Google tools for first-time, moved, absentee, and accessibility-minded voters.
+        </p>
+        <div class="hero-actions">
+          <a class="primary-link" href="#planner">Start planning</a>
+          <a class="secondary-link" href="#google-services">Explore Google tools</a>
+        </div>
+      </div>
+
+      <aside class="hero-panel" aria-label="Quick assistant overview">
+        <div class="panel-header">
+          <span class="panel-badge">Smart election planner</span>
+          <p class="panel-description">Instantly generate a personalized voter card with deadlines, risks, and recommended next steps.</p>
+        </div>
+
         <div class="signal-card">
           <span class="signal-label">Assistant outputs</span>
           <ul>
             <li>Personalized checklist</li>
             <li>Election timeline</li>
-            <li>Risk and deadline warnings</li>
-            <li>Polling and navigation links</li>
+            <li>Risk warnings</li>
+            <li>Google quick actions</li>
           </ul>
         </div>
-      </div>
-    </header>
+
+        <div class="hero-figures">
+          <div class="hero-figure">
+            <span class="hero-figure-value">4</span>
+            <span class="hero-figure-label">voter journeys supported</span>
+          </div>
+          <div class="hero-figure">
+            <span class="hero-figure-value">100%</span>
+            <span class="hero-figure-label">privacy-safe by design</span>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="persona-strip" aria-label="Supported voter journeys">
+      <article class="persona-card">
+        <div class="persona-icon">🗳️</div>
+        <h2>First-time voter</h2>
+        <p>Explains registration, ID rules, and what to expect on voting day.</p>
+      </article>
+      <article class="persona-card">
+        <div class="persona-icon">🏠</div>
+        <h2>Recently moved</h2>
+        <p>Highlights address updates, district changes, and registration risks.</p>
+      </article>
+      <article class="persona-card">
+        <div class="persona-icon">✉️</div>
+        <h2>Absentee voter</h2>
+        <p>Builds a mail ballot plan with request, delivery, and return steps.</p>
+      </article>
+      <article class="persona-card">
+        <div class="persona-icon">♿</div>
+        <h2>Accessibility needs</h2>
+        <p>Surfaces language support, transport help, and accessible voting options.</p>
+      </article>
+    </section>
 
     <main>
-      <section class="persona-strip" aria-label="Supported user journeys">
-        <article>
-          <h2>First-time voter</h2>
-          <p>Explains registration, ID rules, and what happens at the polling place.</p>
-        </article>
-        <article>
-          <h2>Recently moved</h2>
-          <p>Flags address updates, district changes, and registration transfer risks.</p>
-        </article>
-        <article>
-          <h2>Absentee voter</h2>
-          <p>Builds a mail-ballot plan with request, receive, return, and tracking steps.</p>
-        </article>
-        <article>
-          <h2>Accessibility needs</h2>
-          <p>Surfaces language help, transport, companion support, and accessible voting options.</p>
-        </article>
-      </section>
-
       <section class="planner-layout" id="planner">
-        <form id="assistant-form" class="planner-card">
+        <form id="assistant-form" class="planner-card" aria-label="Election planning form">
           <div class="section-heading">
-            <p class="eyebrow">Interactive Intake</p>
+            <p class="eyebrow">Personal intake</p>
             <h2>Tell the assistant about your situation</h2>
           </div>
 
-          <label>
-            Full name
-            <input type="text" name="name" placeholder="Ava" maxlength="40">
-          </label>
+          <div class="form-group">
+            <label for="input-name">Full name</label>
+            <input type="text" id="input-name" name="name" placeholder="Ava" maxlength="40" autocomplete="name" aria-describedby="name-help">
+            <p id="name-help" class="help-text">Optional. Used to personalize your voter card.</p>
+          </div>
 
-          <label>
-            Address or ZIP code
-            <input type="text" name="address" placeholder="1600 Amphitheatre Pkwy, Mountain View, CA">
-          </label>
+          <div class="form-group">
+            <label for="input-address">Address or ZIP code</label>
+            <input type="text" id="input-address" name="address" placeholder="1600 Amphitheatre Pkwy, Mountain View, CA" maxlength="120" autocomplete="street-address" aria-describedby="address-help">
+            <p id="address-help" class="help-text">Used for Google Maps and location-aware guidance.</p>
+          </div>
 
           <div class="grid-2">
-            <label>
-              Days left until election
-              <input type="number" name="daysUntilElection" min="0" max="365" value="21" required>
-            </label>
-
-            <label>
-              Are you registered?
-              <select name="registrationStatus">
+            <div class="form-group">
+              <label for="input-days">Days left until election</label>
+              <input type="number" id="input-days" name="daysUntilElection" min="0" max="365" value="21" required aria-describedby="days-help">
+              <p id="days-help" class="help-text sr-only">Enter 0 to 365.</p>
+            </div>
+            <div class="form-group">
+              <label for="input-registration">Are you registered?</label>
+              <select id="input-registration" name="registrationStatus">
                 <option value="unknown">Not sure</option>
                 <option value="registered">Yes</option>
                 <option value="not_registered">No</option>
               </select>
-            </label>
+            </div>
           </div>
 
           <div class="grid-2">
-            <label>
-              Have you moved recently?
-              <select name="movedRecently">
+            <div class="form-group">
+              <label for="input-moved">Have you moved recently?</label>
+              <select id="input-moved" name="movedRecently">
                 <option value="no">No</option>
                 <option value="yes">Yes</option>
               </select>
-            </label>
-
-            <label>
-              How do you plan to vote?
-              <select name="votingMethod">
+            </div>
+            <div class="form-group">
+              <label for="input-method">How do you plan to vote?</label>
+              <select id="input-method" name="votingMethod">
                 <option value="in_person">In person</option>
                 <option value="mail">By mail / absentee</option>
                 <option value="early">Early voting</option>
               </select>
-            </label>
+            </div>
           </div>
 
           <div class="grid-2">
-            <label>
-              Need accessibility support?
-              <select name="accessibilityNeed">
+            <div class="form-group">
+              <label for="input-accessibility">Need accessibility support?</label>
+              <select id="input-accessibility" name="accessibilityNeed">
                 <option value="none">No</option>
                 <option value="mobility">Mobility support</option>
                 <option value="vision">Vision support</option>
                 <option value="language">Language support</option>
               </select>
-            </label>
-
-            <label>
-              Age group
-              <select name="ageGroup">
+            </div>
+            <div class="form-group">
+              <label for="input-age">Age group</label>
+              <select id="input-age" name="ageGroup">
                 <option value="18_24">18-24</option>
                 <option value="25_44">25-44</option>
                 <option value="45_64">45-64</option>
                 <option value="65_plus">65+</option>
               </select>
-            </label>
+            </div>
           </div>
 
-          <label>
-            Biggest concern
-            <select name="mainConcern">
+          <div class="form-group">
+            <label for="input-concern">Biggest concern</label>
+            <select id="input-concern" name="mainConcern">
               <option value="deadlines">Missing deadlines</option>
               <option value="id_rules">ID / documents</option>
               <option value="where_to_vote">Where to vote</option>
               <option value="mail_ballot">Mail ballot steps</option>
               <option value="confidence">Understanding the full process</option>
             </select>
-          </label>
+          </div>
 
           <div class="toggle-row">
-            <label class="checkbox">
-              <input type="checkbox" name="wantsReminders" checked>
+            <label class="checkbox" for="input-reminders">
+              <input type="checkbox" id="input-reminders" name="wantsReminders" checked>
               <span>Create a reminder-friendly action plan</span>
             </label>
-            <label class="checkbox">
-              <input type="checkbox" name="showGoogleServices" checked>
+            <label class="checkbox" for="input-google">
+              <input type="checkbox" id="input-google" name="showGoogleServices" checked>
               <span>Suggest Google service integrations</span>
             </label>
           </div>
 
-          <button type="submit" class="primary-button">Generate my election plan</button>
+          <button type="submit" class="primary-button">
+            <span class="button-text">Generate my election plan</span>
+            <span class="button-loader" aria-hidden="true"></span>
+          </button>
         </form>
 
-        <section class="results-card" aria-live="polite">
+        <section class="results-card" aria-live="polite" aria-atomic="false">
           <div class="section-heading">
-            <p class="eyebrow">Assistant Output</p>
+            <p class="eyebrow">Assistant output</p>
             <h2>Your personalized journey</h2>
           </div>
 
-          <div id="summary" class="summary-panel"></div>
+          <div id="onboarding" class="onboarding-panel">
+            <h3 class="onboarding-title">Welcome! Here’s how BallotBuddy works</h3>
+            <div class="onboarding-step">
+              <span class="step-number">1</span>
+              <div class="step-content">
+                <p class="step-heading">Fill in the form</p>
+                <p class="muted-text">Share your name, address, timeline, and voting plan.</p>
+              </div>
+            </div>
+            <div class="onboarding-step">
+              <span class="step-number">2</span>
+              <div class="step-content">
+                <p class="step-heading">Generate your election plan</p>
+                <p class="muted-text">The assistant analyzes your situation instantly.</p>
+              </div>
+            </div>
+            <div class="onboarding-step">
+              <span class="step-number">3</span>
+              <div class="step-content">
+                <p class="step-heading">See your voter card</p>
+                <p class="muted-text">Checklist, timeline, risks, and Google shortcuts appear here.</p>
+              </div>
+            </div>
+          </div>
 
-          <section class="generated-card-panel">
+          <div id="summary" class="summary-panel" style="display:none;"></div>
+
+          <section class="generated-card-panel" aria-label="Generated voter card">
             <div class="card-heading">
               <div>
                 <p class="eyebrow">Generated Voter Card</p>
                 <h3>Your smart action card</h3>
               </div>
               <div class="card-actions">
-                <button id="copyCardButton" class="secondary-button" type="button">Copy card text</button>
-                <button id="printCardButton" class="primary-button" type="button">Print / Save PDF</button>
+                <button id="copyCardButton" class="secondary-button" type="button" aria-label="Copy card text to clipboard">
+                  <span>Copy card text</span>
+                </button>
+                <button id="printCardButton" class="primary-button" type="button" aria-label="Print or save as PDF">
+                  <span>Print / Save PDF</span>
+                </button>
               </div>
             </div>
             <article id="generatedCard" class="generated-card"></article>
           </section>
 
           <div class="insight-grid">
-            <section class="score-card">
+            <section class="score-card" aria-label="Election readiness score">
               <h3>Election readiness</h3>
               <div id="readinessScore" class="score-meter"></div>
             </section>
 
-            <section class="milestone-card">
+            <section class="milestone-card" aria-label="Next milestones">
               <h3>Next milestones</h3>
               <ul id="milestones" class="item-list milestone-list"></ul>
             </section>
           </div>
 
           <div class="results-grid">
-            <section>
+            <section aria-label="Priority actions">
               <h3>Priority actions</h3>
               <ol id="checklist" class="item-list numbered"></ol>
             </section>
 
-            <section>
+            <section aria-label="Timeline">
               <h3>Timeline</h3>
               <ul id="timeline" class="item-list timeline"></ul>
             </section>
           </div>
 
           <div class="results-grid">
-            <section>
+            <section aria-label="Watch-outs and risks">
               <h3>Watch-outs</h3>
               <ul id="risks" class="item-list warnings"></ul>
             </section>
 
-            <section>
+            <section aria-label="Assistant explanation">
               <h3>Assistant explanation</h3>
               <div id="narrative" class="narrative-box"></div>
             </section>
           </div>
 
-          <section id="google-services" class="google-panel">
+          <section id="google-services" class="google-panel" aria-label="Google services integration">
             <h3>Google services that strengthen this assistant</h3>
             <div id="googleSuggestions" class="google-grid"></div>
-            <section class="calendar-panel">
+
+            <section class="calendar-panel" aria-label="Calendar reminders">
               <div class="calendar-heading">
-                <div>
-                  <h4>One-click reminder links</h4>
-                  <p class="muted-text">Open these in Google Calendar to save the most important deadlines from your plan.</p>
-                </div>
+                <h4>One-click reminder links</h4>
+                <p class="muted-text">Open these in Google Calendar to save your critical deadlines.</p>
               </div>
               <div id="calendarLinks" class="calendar-grid"></div>
             </section>
+
             <div class="lookup-bar chat-controls">
-              <input id="question-input" type="text" placeholder="Ask something like: What should I do this week?">
+              <input id="question-input" type="text" placeholder="Ask something like: What should I do this week?" aria-label="Ask a question about your plan" maxlength="300">
               <button id="ask-button" class="secondary-button" type="button">Ask BallotBuddy</button>
             </div>
-            <div class="quick-question-row">
+
+            <div class="quick-question-row" role="group" aria-label="Quick questions">
               <button class="chip-button" type="button" data-question="What should I do first?">What should I do first?</button>
               <button class="chip-button" type="button" data-question="What are my biggest risks?">What are my biggest risks?</button>
               <button class="chip-button" type="button" data-question="How should I prepare for voting day?">How should I prepare for voting day?</button>
             </div>
+
             <div id="chat-result" class="civic-result"></div>
           </section>
         </section>
       </section>
     </main>
+
+    <footer class="app-footer">
+      <button id="dark-mode-toggle" class="dark-mode-toggle" type="button" aria-label="Toggle dark mode">
+        <span class="toggle-icon" aria-hidden="true"></span>
+        <span class="toggle-label">Toggle dark mode</span>
+      </button>
+      <p class="footer-text">BallotBuddy — Built for the Civic Guidance Challenge</p>
+    </footer>
   </div>
 
   <script type="module" src="app.js"></script>
