@@ -87,6 +87,12 @@ export function buildElectionPlan(rawFormData) {
     electionDate,
     name
   });
+  const googleWorkflow = buildGoogleWorkflow({
+    formData,
+    milestones,
+    quickLinks
+  });
+  const officialLookupLinks = buildOfficialLookupLinks(formData);
 
   const generatedCard = buildGeneratedCard({
     name,
@@ -106,12 +112,15 @@ export function buildElectionPlan(rawFormData) {
     timeline,
     risks,
     googleSuggestions,
+    googleWorkflow,
     narrative: buildNarrative({ name, persona, daysLeft, formData }),
     concernInsight: concernMap[formData.mainConcern] || concernMap.confidence,
     readiness,
     milestones,
     calendarLinks,
     quickLinks,
+    officialLookupLinks,
+    googleServicesEnabled: formData.showGoogleServices === "on",
     generatedCard
   };
 }
@@ -251,18 +260,26 @@ function buildRisks(formData, daysLeft) {
  * @returns {Object[]} Google suggestion objects.
  */
 function buildGoogleSuggestions(formData) {
+  if (formData.showGoogleServices !== "on") {
+    return [];
+  }
+
   const suggestions = [
     {
       title: "Google Civic Information API",
-      body: "Look up elections, polling locations, and official voting data from an address when an API key is available."
+      body: "Enrich the assistant with official election details, polling locations, early-voting sites, drop boxes, and representative data from an address."
     },
     {
       title: "Google Maps",
-      body: "Generate directions to polling places, early-voting centers, or ballot drop boxes."
+      body: "Open travel-ready routes for polling places, early-voting centers, ballot drop boxes, and election offices."
     },
     {
       title: "Google Calendar",
-      body: "Turn the checklist into reminders for registration, ballot return, and election day travel."
+      body: "Convert milestones into actionable reminders for registration checks, ballot return windows, and election-day logistics."
+    },
+    {
+      title: "Google Search",
+      body: "Launch prefilled official-information searches focused on registration status, polling-place confirmation, and election-office help."
     }
   ];
 
@@ -274,6 +291,117 @@ function buildGoogleSuggestions(formData) {
   }
 
   return suggestions;
+}
+
+/**
+ * Builds workflow cards that connect the plan to Google services.
+ * @param {Object} params - Parameters object.
+ * @param {Object} params.formData - Validated form data.
+ * @param {Object[]} params.milestones - Generated milestones.
+ * @param {Object[]} params.quickLinks - Existing quick links.
+ * @returns {Object[]} Workflow items.
+ */
+function buildGoogleWorkflow({ formData, milestones, quickLinks }) {
+  if (formData.showGoogleServices !== "on") {
+    return [];
+  }
+
+  const firstMilestone = milestones[0];
+  const mapsLink = quickLinks.find((item) => item.title.includes("Maps"));
+  const calendarLink = quickLinks.find((item) => item.title.includes("Calendar"));
+  const translateLink = quickLinks.find((item) => item.title.includes("Translate"));
+
+  const workflow = [
+    {
+      title: "1. Verify with official Google search",
+      body: "Start the plan with a search query focused on official election offices and polling-place details for your area.",
+      actionLabel: "Open official search",
+      href: buildOfficialElectionSearchLink(formData.address)
+    }
+  ];
+
+  if (mapsLink) {
+    workflow.push({
+      title: "2. Save your route in Google Maps",
+      body: "Lock in a route early so voting-day travel, parking, and timing are not left to guesswork.",
+      actionLabel: "Open Maps route",
+      href: mapsLink.href
+    });
+  }
+
+  if (calendarLink && firstMilestone) {
+    workflow.push({
+      title: "3. Put the next milestone on your calendar",
+      body: `The assistant already identified "${firstMilestone.title}" as the next milestone. Save it to Google Calendar so the plan becomes time-bound.`,
+      actionLabel: "Create calendar hold",
+      href: calendarLink.href
+    });
+  }
+
+  if (translateLink) {
+    workflow.push({
+      title: "4. Translate important instructions",
+      body: "For language support, Google Translate can help review official voter instructions before you act.",
+      actionLabel: "Open Google Translate",
+      href: translateLink.href
+    });
+  }
+
+  return workflow.slice(0, 4);
+}
+
+/**
+ * Builds official election lookup shortcuts using Google Search and Maps.
+ * @param {Object} formData - Validated form data.
+ * @returns {Object[]} Shortcut items.
+ */
+function buildOfficialLookupLinks(formData) {
+  if (formData.showGoogleServices !== "on") {
+    return [];
+  }
+
+  const address = formData.address?.trim();
+  const links = [
+    {
+      title: "Find your election office",
+      body: "Search for the nearest official election office using a query weighted toward government sources.",
+      actionLabel: "Search election office",
+      href: buildOfficialElectionSearchLink(address)
+    },
+    {
+      title: "Check voter registration",
+      body: "Use Google Search to locate the official voter-registration lookup or state elections portal for your area.",
+      actionLabel: "Search registration lookup",
+      href: buildOfficialRegistrationSearchLink(address)
+    }
+  ];
+
+  if (formData.votingMethod === VOTING_METHODS.MAIL) {
+    links.push({
+      title: "Track ballot return options",
+      body: "Search for official mail-ballot tracking, drop-box, and return guidance close to your location.",
+      actionLabel: "Search ballot tracking",
+      href: buildOfficialBallotSearchLink(address)
+    });
+  } else {
+    links.push({
+      title: "Confirm polling place logistics",
+      body: "Search for official polling-place hours, changes, and election-day instructions for the current address.",
+      actionLabel: "Search polling updates",
+      href: buildOfficialPollingSearchLink(address)
+    });
+  }
+
+  if (address) {
+    links.push({
+      title: "Open the area in Google Maps",
+      body: "Review route, commute time, and nearby election services in Google Maps before the final rush.",
+      actionLabel: "Open Google Maps",
+      href: buildMapsLink(address)
+    });
+  }
+
+  return links.slice(0, 4);
 }
 
 /**
@@ -331,6 +459,54 @@ export function buildMapsLink(address) {
     return "";
   }
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address.trim())}`;
+}
+
+/**
+ * Builds an official-election-focused Google Search link.
+ * @param {string} address - Optional address or ZIP code.
+ * @returns {string} Google Search URL.
+ */
+function buildOfficialElectionSearchLink(address) {
+  const query = address?.trim()
+    ? `${address.trim()} official election office polling place site:.gov`
+    : "official election office polling place site:.gov";
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+/**
+ * Builds a Google Search link for voter registration lookup.
+ * @param {string} address - Optional address or ZIP code.
+ * @returns {string} Google Search URL.
+ */
+function buildOfficialRegistrationSearchLink(address) {
+  const query = address?.trim()
+    ? `${address.trim()} official voter registration lookup site:.gov`
+    : "official voter registration lookup site:.gov";
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+/**
+ * Builds a Google Search link for polling-place updates.
+ * @param {string} address - Optional address or ZIP code.
+ * @returns {string} Google Search URL.
+ */
+function buildOfficialPollingSearchLink(address) {
+  const query = address?.trim()
+    ? `${address.trim()} official polling place hours election day site:.gov`
+    : "official polling place hours election day site:.gov";
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
+/**
+ * Builds a Google Search link for mail-ballot support.
+ * @param {string} address - Optional address or ZIP code.
+ * @returns {string} Google Search URL.
+ */
+function buildOfficialBallotSearchLink(address) {
+  const query = address?.trim()
+    ? `${address.trim()} official mail ballot tracking drop box site:.gov`
+    : "official mail ballot tracking drop box site:.gov";
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 }
 
 /**
@@ -743,4 +919,3 @@ function buildGeneratedCard({ name, formData, persona, readiness, checklist, mil
     quickLinks: quickLinks.slice(0, 3)
   };
 }
-

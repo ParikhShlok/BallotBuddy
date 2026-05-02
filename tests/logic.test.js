@@ -264,6 +264,48 @@ test("accessibility needs add language support link", () => {
   assert.ok(plan.quickLinks.some((item) => item.title.includes("Translate")));
 });
 
+test("google workflow is generated when services are enabled", () => {
+  const plan = buildElectionPlan({
+    name: "Maya",
+    address: "Denver, CO",
+    daysUntilElection: 14,
+    registrationStatus: "unknown",
+    movedRecently: "yes",
+    votingMethod: "early",
+    accessibilityNeed: "language",
+    ageGroup: "18_24",
+    mainConcern: "where_to_vote",
+    wantsReminders: "on",
+    showGoogleServices: "on"
+  });
+
+  assert.ok(plan.googleWorkflow.length >= 3);
+  assert.ok(plan.officialLookupLinks.length >= 3);
+  assert.ok(plan.googleWorkflow.some((item) => item.title.includes("Google")));
+  assert.ok(plan.officialLookupLinks.some((item) => item.href.includes("google.com/search")));
+});
+
+test("google sections collapse when services are disabled", () => {
+  const plan = buildElectionPlan({
+    name: "Maya",
+    address: "Denver, CO",
+    daysUntilElection: 14,
+    registrationStatus: "unknown",
+    movedRecently: "yes",
+    votingMethod: "early",
+    accessibilityNeed: "none",
+    ageGroup: "25_44",
+    mainConcern: "confidence",
+    wantsReminders: "on",
+    showGoogleServices: "off"
+  });
+
+  assert.equal(plan.googleServicesEnabled, false);
+  assert.equal(plan.googleSuggestions.length, 0);
+  assert.equal(plan.googleWorkflow.length, 0);
+  assert.equal(plan.officialLookupLinks.length, 0);
+});
+
 test("urgent timeline is generated when election is close", () => {
   const plan = buildElectionPlan({
     name: "Test",
@@ -345,4 +387,3 @@ test("milestones include dates when reminders enabled", () => {
     assert.ok(typeof milestone.offsetDays === "number", "Milestone should have offsetDays");
   }
 });
-

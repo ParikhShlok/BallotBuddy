@@ -141,7 +141,7 @@ export function validateFormData(rawData) {
       MAIN_CONCERNS.CONFIDENCE
     ),
     wantsReminders: data.wantsReminders === "on" ? "on" : "off",
-    showGoogleServices: data.showGoogleServices === "on" ? "on" : "off"
+    showGoogleServices: data.showGoogleServices === "off" ? "off" : "on"
   };
 }
 

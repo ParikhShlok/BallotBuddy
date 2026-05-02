@@ -1,3 +1,4 @@
 window.APP_CONFIG = {
-  GOOGLE_CIVIC_API_KEY: ""
+  GOOGLE_CIVIC_API_KEY: "AIzaSyD_jq55mRnjc_pK0emV-frgeosE9cYv0Qo",
+  GOOGLE_CIVIC_ELECTION_ID: ""
 };

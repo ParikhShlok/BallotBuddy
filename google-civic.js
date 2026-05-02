@@ -8,9 +8,10 @@
  * Fetches voter information from Google Civic Information API.
  * @param {string} address - Voter's address.
  * @param {string} [apiKey=""] - Google Civic API key.
+ * @param {string} [electionId=""] - Optional election ID when a specific election must be targeted.
  * @returns {Promise<Object|null>} Voter information or null.
  */
-export async function fetchVoterInfo(address, apiKey = "") {
+export async function fetchVoterInfo(address, apiKey = "", electionId = "") {
   if (!address?.trim() || !apiKey) {
     return null;
   }
@@ -19,7 +20,9 @@ export async function fetchVoterInfo(address, apiKey = "") {
     const url = new URL("https://www.googleapis.com/civicinfo/v2/voterinfo");
     url.searchParams.set("address", address.trim());
     url.searchParams.set("key", apiKey);
-    url.searchParams.set("electionId", "2000");
+    if (electionId?.trim()) {
+      url.searchParams.set("electionId", electionId.trim());
+    }
 
     const response = await fetch(url.toString());
 
@@ -168,11 +171,15 @@ function formatAddress(address) {
 /**
  * Builds a Google Civic API test URL to verify key validity.
  * @param {string} apiKey - API key to test.
+ * @param {string} [electionId=""] - Optional election ID for preconfigured testing.
  * @returns {string} Test URL.
  */
-export function buildCivicTestUrl(apiKey) {
+export function buildCivicTestUrl(apiKey, electionId = "") {
   const url = new URL("https://www.googleapis.com/civicinfo/v2/elections");
   url.searchParams.set("key", apiKey);
+  if (electionId?.trim()) {
+    url.searchParams.set("electionId", electionId.trim());
+  }
   return url.toString();
 }
 

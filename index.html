@@ -39,7 +39,7 @@
         <h1 id="hero-heading">Navigate election day with a plan you can trust.</h1>
         <p class="hero-text">
           BallotBuddy transforms your voting situation into a clear action plan, deadline tracker,
-          and ready-to-use Google tools for first-time, moved, absentee, and accessibility-minded voters.
+          and ready-to-use Google workflow for first-time, moved, absentee, and accessibility-minded voters.
         </p>
         <div class="hero-actions">
           <a class="primary-link" href="#planner">Start planning</a>
@@ -50,7 +50,7 @@
       <aside class="hero-panel" aria-label="Quick assistant overview">
         <div class="panel-header">
           <span class="panel-badge">Smart election planner</span>
-          <p class="panel-description">Instantly generate a personalized voter card with deadlines, risks, and recommended next steps.</p>
+          <p class="panel-description">Instantly generate a personalized voter card with deadlines, risks, official-data shortcuts, and recommended next steps.</p>
         </div>
 
         <div class="signal-card">
@@ -59,14 +59,14 @@
             <li>Personalized checklist</li>
             <li>Election timeline</li>
             <li>Risk warnings</li>
-            <li>Google quick actions</li>
+            <li>Google workflow actions</li>
           </ul>
         </div>
 
         <div class="hero-figures">
           <div class="hero-figure">
-            <span class="hero-figure-value">4</span>
-            <span class="hero-figure-label">voter journeys supported</span>
+            <span class="hero-figure-value">5</span>
+            <span class="hero-figure-label">Google services woven into the journey</span>
           </div>
           <div class="hero-figure">
             <span class="hero-figure-value">100%</span>
@@ -291,7 +291,24 @@
 
           <section id="google-services" class="google-panel" aria-label="Google services integration">
             <h3>Google services that strengthen this assistant</h3>
+            <p class="muted-text">BallotBuddy uses Google tools as part of the voter journey: official lookup, route planning, reminders, translation, and live civic data.</p>
             <div id="googleSuggestions" class="google-grid"></div>
+
+            <section class="calendar-panel" aria-label="Google workflow actions">
+              <div class="calendar-heading">
+                <h4>Google-powered workflow</h4>
+                <p class="muted-text">Each action below connects the current voter plan to a practical Google tool so the user can move from advice to action.</p>
+              </div>
+              <div id="googleWorkflow" class="calendar-grid"></div>
+            </section>
+
+            <section class="calendar-panel" aria-label="Official election lookup links">
+              <div class="calendar-heading">
+                <h4>Official election lookup shortcuts</h4>
+                <p class="muted-text">Use Google Search and Maps shortcuts tuned for official election offices, registration checks, polling updates, and ballot help.</p>
+              </div>
+              <div id="officialLookupLinks" class="calendar-grid"></div>
+            </section>
 
             <section class="calendar-panel" aria-label="Calendar reminders">
               <div class="calendar-heading">
@@ -299,6 +316,14 @@
                 <p class="muted-text">Open these in Google Calendar to save your critical deadlines.</p>
               </div>
               <div id="calendarLinks" class="calendar-grid"></div>
+            </section>
+
+            <section class="calendar-panel" aria-label="Google Civic data">
+              <div class="calendar-heading">
+                <h4>Official Google Civic data</h4>
+                <p class="muted-text">When a Civic API key is configured, BallotBuddy enriches the plan with official election, polling-place, drop-box, and representative data.</p>
+              </div>
+              <div id="civicData" class="civic-result"></div>
             </section>
 
             <div class="lookup-bar chat-controls">
@@ -327,6 +352,7 @@
     </footer>
   </div>
 
-  <script type="module" src="app.js"></script>
+  <script src="config.js"></script>
+  <script src="bundle.js"></script>
 </body>
 </html>

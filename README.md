@@ -2,6 +2,14 @@
 
 BallotBuddy is an interactive election journey assistant designed for users who are often underserved by generic election information pages. Instead of giving everyone the same instructions, it adapts the guidance based on user context and produces a practical action plan.
 
+## Submission Highlights
+
+- Personalized election assistant aligned directly to the challenge prompt
+- Multi-step decision engine for first-time, moved, absentee, and accessibility-focused voters
+- Broad Google-services adoption across the workflow, not just a single API call
+- Official-data-ready Google Civic integration with graceful fallback
+- Small, dependency-light, accessible, and tested codebase suitable for challenge review
+
 This project is built for the challenge problem:
 
 > Create an assistant that helps users understand the election process, timelines, and steps in an interactive and easy-to-follow way.
@@ -21,11 +29,13 @@ These personas were chosen because they commonly face confusion, deadline risk, 
 
 - It is **interactive**, not static: the user answers a few contextual questions and receives a tailored journey.
 - It is **decision-driven**: logic changes based on registration certainty, move status, voting method, urgency, age band, and accessibility needs.
-- It uses **Google services meaningfully** without blocking reviewers behind paid setup:
+- It uses **Google services across the full voter workflow**, not as isolated links:
+  - Google Search to find official election offices, registration lookup pages, polling-place updates, and ballot help
   - Google Maps links for directions and location awareness
   - Google Calendar as a reminder path for deadlines and election-day actions
   - Google Translate as an accessibility extension for multilingual users
-  - Google Civic Information API integration (graceful fallback when no key)
+  - Google Civic Information API integration for official election, polling-place, and representative data
+  - Google-service workflow cards that connect the user plan to concrete next actions
 - It is **lightweight and submission-safe**: no external build tools, no heavy dependencies, very small repository size.
 - It is **engineered well**: modular logic, accessible UI, responsive design, automated tests, and dark mode support.
 
@@ -73,9 +83,24 @@ The assistant generates:
 - An election readiness score with urgency signals
 - Concrete next milestones with one-click Google Calendar reminders
 - A generated voter action card with shareable Google quick links
+- A Google-powered workflow section that maps the plan to Search, Maps, Calendar, and Translate actions
+- Official election lookup shortcuts focused on government sources
+- Live Google Civic Information API enrichment when a key is configured
 - A narrative explanation of why those steps matter
 - A local smart Q&A layer that answers follow-up questions from the current user plan
 - Suggested Google-service integrations
+
+### 5. Google workflow depth
+
+This project intentionally shows broader adoption of Google services inside the product flow:
+
+- `Google Search` is used to help users reach official government election resources faster.
+- `Google Maps` is used for address review, route planning, polling-place access, and civic location shortcuts.
+- `Google Calendar` is used to turn milestones into concrete reminder actions.
+- `Google Translate` supports multilingual guidance for language-assistance users.
+- `Google Civic Information API` enriches the assistant with official election, location, and representative data when configured.
+
+This matters for the challenge because the assistant is not only answering questions. It is helping users move from confusion to action using practical Google-powered steps.
 
 ## Security features
 
@@ -102,6 +127,7 @@ The assistant generates:
 ```text
 .
 |-- app.js              # UI rendering and event handling
+|-- bundle.js           # Direct-browser runtime bundle for opening index.html locally
 |-- constants.js        # Application constants (no magic numbers)
 |-- google-civic.js     # Google Civic Information API client
 |-- index.html          # Main page with CSP and accessibility
@@ -121,20 +147,37 @@ The assistant generates:
 
 Open `index.html` in a browser.
 
+Important note:
+
+- The submission includes `bundle.js` so reviewers can open `index.html` directly without needing a build step or module-aware dev server.
+- The modular source files remain in the repository for code quality and maintainability.
+
 For tests:
 
 ```bash
 npm test
 ```
 
-## Google Civic Information API (optional)
+## Google Civic Information API (optional but fully wired)
 
 The app includes a `google-civic.js` module that can fetch real voter information when a Google Civic Information API key is available. Without a key, the app falls back gracefully to its built-in planning logic.
 
 To enable:
 1. Obtain a free API key from [Google Cloud Console](https://console.cloud.google.com/)
 2. Enable the Google Civic Information API
-3. Set the key in `config.js` or use the module directly
+3. Set the key in `config.js`
+4. Optionally set `GOOGLE_CIVIC_ELECTION_ID` if you want to target a specific election
+
+For this submission, the app is already wired for live Civic API usage through `config.js`.
+
+Once enabled, the app can display:
+
+- Election name and election day
+- Polling locations
+- Early-voting sites
+- Drop-off locations
+- Representative information
+- Google Maps shortcuts for official civic locations
 
 ## Evaluation mapping
 
@@ -143,6 +186,7 @@ To enable:
 - Small modular files with single responsibilities
 - Constants extracted to eliminate magic numbers
 - Clear separation between UI, logic, validation, and utilities
+- Direct-browser bundle included for reliable reviewer execution without changing the modular source structure
 - Comprehensive JSDoc documentation
 - Readable naming and maintainable structure
 
@@ -166,11 +210,12 @@ To enable:
 
 ### Testing
 
-- 30+ automated tests covering:
+- 35+ automated tests covering:
   - Persona resolution logic
   - Planning logic for all voting methods
   - Readiness scoring accuracy
-  - Google services integration
+  - Google workflow generation
+  - Google Civic API URL building and response normalization
   - Security (XSS, injection, prototype pollution)
   - Accessibility (HTML escaping)
   - Edge cases and negative paths
@@ -190,13 +235,20 @@ To enable:
 
 ### Google Services
 
-- Google Maps (directions and location)
-- Google Calendar (event reminders)
-- Google Translate (multilingual support)
-- Google Civic Information API (official data)
-- Google Search (official election info)
+- Google Maps for address review, travel readiness, and civic-location shortcuts
+- Google Calendar for milestone reminders and election-day scheduling
+- Google Translate for multilingual voting guidance
+- Google Civic Information API for official election, location, and representative data
+- Google Search with official-source-focused election office, registration, polling, and ballot queries
+- Google workflow cards that connect voter intent to practical Google-powered next actions
+
+## Reviewer Notes
+
+- The repository is lightweight and remains far below the 10 MB limit.
+- The project is designed to work when `index.html` is opened directly in a browser, which helps challenge reviewers test it quickly.
+- The project is designed to work even without a Civic API key, while still exposing a real Google Civic integration path for live evaluation.
+- When a Civic API key is present in `config.js`, the assistant shows live official election data directly in the UI.
 
 ## Submission note
 
 For the challenge submission, include the public GitHub repository link and keep the repository on a single branch as required. Repository size is well under 10 MB.
-

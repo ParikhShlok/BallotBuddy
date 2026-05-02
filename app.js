@@ -9,6 +9,11 @@ import {
   buildElectionPlan,
   buildMapsLink
 } from "./logic.js";
+import {
+  fetchVoterInfo,
+  fetchRepresentatives,
+  buildCivicTestUrl
+} from "./google-civic.js";
 
 import { validateQuestion } from "./validation.js";
 
@@ -33,7 +38,10 @@ const timelineEl = document.getElementById("timeline");
 const risksEl = document.getElementById("risks");
 const narrativeEl = document.getElementById("narrative");
 const googleSuggestionsEl = document.getElementById("googleSuggestions");
+const googleWorkflowEl = document.getElementById("googleWorkflow");
+const officialLookupLinksEl = document.getElementById("officialLookupLinks");
 const calendarLinksEl = document.getElementById("calendarLinks");
+const civicDataEl = document.getElementById("civicData");
 const askButton = document.getElementById("ask-button");
 const copyCardButton = document.getElementById("copyCardButton");
 const printCardButton = document.getElementById("printCardButton");
@@ -42,6 +50,8 @@ const chatResultEl = document.getElementById("chat-result");
 const toastContainer = document.getElementById("toast-container");
 const darkModeToggle = document.getElementById("dark-mode-toggle");
 const quickQuestionButtons = document.querySelectorAll("[data-question]");
+const appConfig = window.APP_CONFIG || {};
+let civicRequestId = 0;
 
 function readFormData() {
   const data = new FormData(form);
@@ -97,7 +107,7 @@ function updateOnboardingVisibility(showProfile) {
   }
 }
 
-function renderPlan(formData) {
+async function renderPlan(formData) {
   const plan = buildElectionPlan(formData);
   const mapsLink = buildMapsLink(formData.address);
   const shouldShowCard = hasGeneratedProfile(formData);
@@ -113,7 +123,10 @@ function renderPlan(formData) {
   renderRisks(plan);
   renderNarrative(plan);
   renderGoogleSuggestions(plan);
+  renderGoogleWorkflow(plan);
+  renderOfficialLookupLinks(plan);
   renderCalendarLinks(plan);
+  await renderCivicData(plan, formData);
   resetChatResult();
 
   announceToScreenReader(
@@ -175,6 +188,7 @@ function renderGeneratedCard(plan, shouldShowCard) {
           <p class="card-label">Readiness</p>
           <p class="card-value">${escapeHtml(card.readinessLabel)}</p>
         </div>
+      </div>
       <div class="generated-card-block">
         <p class="card-label">Priority action</p>
         <p>${escapeHtml(card.priorityLine)}</p>
@@ -196,6 +210,7 @@ function renderGeneratedCard(plan, shouldShowCard) {
             .map((item) => `<a href="${item.href}" target="_blank" rel="noreferrer noopener">${escapeHtml(item.title)}</a>`)
             .join("")}
         </div>
+      </div>
     `;
     generatedCardEl.innerHTML = html;
   } else {
@@ -290,6 +305,16 @@ function renderNarrative(plan) {
 }
 
 function renderGoogleSuggestions(plan) {
+  if (!plan.googleServicesEnabled) {
+    googleSuggestionsEl.innerHTML = `
+      <article>
+        <h4>Google integrations are currently hidden</h4>
+        <p>Turn the Google services toggle back on to show workflow actions, official lookups, Calendar links, and Google Civic API guidance.</p>
+      </article>
+    `;
+    return;
+  }
+
   const fragment = document.createDocumentFragment();
 
   for (const item of plan.googleSuggestions) {
@@ -305,11 +330,74 @@ function renderGoogleSuggestions(plan) {
   googleSuggestionsEl.appendChild(fragment);
 }
 
+function renderGoogleWorkflow(plan) {
+  if (!plan.googleServicesEnabled) {
+    googleWorkflowEl.innerHTML = `
+      <article>
+        <h4>Workflow hidden</h4>
+        <p class="muted-text">Enable Google services in the form to see how BallotBuddy connects your plan to Google Search, Maps, Calendar, Translate, and official Civic data.</p>
+      </article>
+    `;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  for (const item of plan.googleWorkflow) {
+    const article = document.createElement("article");
+    article.innerHTML = `
+      <h4>${escapeHtml(item.title)}</h4>
+      <p>${escapeHtml(item.body)}</p>
+      <a href="${item.href}" target="_blank" rel="noreferrer noopener">${escapeHtml(item.actionLabel)}</a>
+    `;
+    fragment.appendChild(article);
+  }
+
+  googleWorkflowEl.innerHTML = "";
+  googleWorkflowEl.appendChild(fragment);
+}
+
+function renderOfficialLookupLinks(plan) {
+  if (!plan.googleServicesEnabled) {
+    officialLookupLinksEl.innerHTML = `
+      <article>
+        <h4>Official lookup links hidden</h4>
+        <p class="muted-text">Enable Google services in the form to generate official election-office, registration, polling-place, and ballot-help shortcuts.</p>
+      </article>
+    `;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  for (const item of plan.officialLookupLinks) {
+    const article = document.createElement("article");
+    article.innerHTML = `
+      <h4>${escapeHtml(item.title)}</h4>
+      <p>${escapeHtml(item.body)}</p>
+      <a href="${item.href}" target="_blank" rel="noreferrer noopener">${escapeHtml(item.actionLabel)}</a>
+    `;
+    fragment.appendChild(article);
+  }
+
+  officialLookupLinksEl.innerHTML = "";
+  officialLookupLinksEl.appendChild(fragment);
+}
+
 function renderCalendarLinks(plan) {
+  if (!plan.googleServicesEnabled) {
+    calendarLinksEl.innerHTML = `
+      <article>
+        <p class="muted-text">Google Calendar links are hidden because Google services are turned off in the form.</p>
+      </article>
+    `;
+    return;
+  }
+
   if (!plan.calendarLinks.length) {
     calendarLinksEl.innerHTML = `
       <article>
-        <p class="muted-text">Turn on reminder-friendly planning to generate Calendar links for your next milestones.</p>
+        <p class="muted-text">Turn on reminder-friendly planning to generate Google Calendar links for your next milestones.</p>
       </article>
     `;
     return;
@@ -329,6 +417,120 @@ function renderCalendarLinks(plan) {
 
   calendarLinksEl.innerHTML = "";
   calendarLinksEl.appendChild(fragment);
+}
+
+function renderCivicLocationLinks(title, items) {
+  if (!items.length) {
+    return "";
+  }
+
+  return `
+    <div class="civic-section">
+      <h5>${escapeHtml(title)}</h5>
+      <ul class="civic-list">
+        ${items
+          .slice(0, 3)
+          .map((item) => {
+            const mapsHref = buildMapsLink(item.address);
+            return `
+              <li>
+                <strong>${escapeHtml(item.address || "Official location")}</strong>
+                <p>${escapeHtml(item.pollingHours || "Check official election office hours.")}</p>
+                ${mapsHref ? `<a href="${mapsHref}" target="_blank" rel="noreferrer noopener">Open in Google Maps</a>` : ""}
+              </li>
+            `;
+          })
+          .join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function renderRepresentativeLinks(representatives) {
+  const offices = representatives?.representatives || [];
+  if (!offices.length) {
+    return "";
+  }
+
+  return `
+    <div class="civic-section">
+      <h5>Representatives</h5>
+      <ul class="civic-list">
+        ${offices
+          .slice(0, 3)
+          .map((office) => `
+            <li>
+              <strong>${escapeHtml(office.office)}</strong>
+              <p>${escapeHtml(office.officials.map((official) => official.name).join(", ") || "No official returned")}</p>
+            </li>
+          `)
+          .join("")}
+      </ul>
+    </div>
+  `;
+}
+
+async function renderCivicData(plan, formData) {
+  if (!plan.googleServicesEnabled) {
+    civicDataEl.innerHTML = `
+      <p class="muted-text">Google Civic data is hidden because Google services are turned off in the form.</p>
+    `;
+    return;
+  }
+
+  const address = formData.address?.trim();
+  const apiKey = appConfig.GOOGLE_CIVIC_API_KEY || "";
+  const electionId = appConfig.GOOGLE_CIVIC_ELECTION_ID || "";
+
+  if (!address) {
+    civicDataEl.innerHTML = `
+      <p class="muted-text">Add an address or ZIP code to unlock location-aware Google Civic lookups and official polling-place context.</p>
+    `;
+    return;
+  }
+
+  if (!apiKey) {
+    civicDataEl.innerHTML = `
+      <div class="civic-section">
+        <h5>Civic API ready for activation</h5>
+        <p>BallotBuddy is already wired to the Google Civic Information API. Add a key in <code>config.js</code> to load official election, polling-place, drop-box, and representative data for <strong>${escapeHtml(address)}</strong>.</p>
+        <a href="${buildCivicTestUrl("YOUR_API_KEY", electionId)}" target="_blank" rel="noreferrer noopener">View the Civic API test endpoint format</a>
+      </div>
+    `;
+    return;
+  }
+
+  const requestId = ++civicRequestId;
+  civicDataEl.innerHTML = "<p class=\"muted-text\">Loading official Google Civic information...</p>";
+
+  const [voterInfo, representatives] = await Promise.all([
+    fetchVoterInfo(address, apiKey, electionId),
+    fetchRepresentatives(address, apiKey)
+  ]);
+
+  if (requestId !== civicRequestId) {
+    return;
+  }
+
+  if (!voterInfo && !representatives) {
+    civicDataEl.innerHTML = `
+      <p class="muted-text">Google Civic data could not be loaded right now. The assistant still keeps your fallback plan active with Google Search, Maps, Calendar, and workflow shortcuts.</p>
+    `;
+    return;
+  }
+
+  civicDataEl.innerHTML = `
+    ${voterInfo?.election ? `
+      <div class="civic-section">
+        <h5>${escapeHtml(voterInfo.election.name || "Election information")}</h5>
+        <p>Election day: ${escapeHtml(voterInfo.election.electionDay || "See official source")}</p>
+      </div>
+    ` : ""}
+    ${renderCivicLocationLinks("Polling locations", voterInfo?.pollingLocations || [])}
+    ${renderCivicLocationLinks("Early-voting sites", voterInfo?.earlyVoteSites || [])}
+    ${renderCivicLocationLinks("Ballot drop boxes", voterInfo?.dropOffLocations || [])}
+    ${renderRepresentativeLinks(representatives)}
+  `;
 }
 
 function resetChatResult() {
@@ -403,7 +605,7 @@ function initDarkMode() {
 // Event listeners
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  renderPlan(readFormData());
+  void renderPlan(readFormData());
   showToast("Your election plan has been updated!", "success");
 });
 
@@ -413,7 +615,7 @@ form.addEventListener("input", () => {
 
 form.addEventListener("change", () => {
   persistForm();
-  renderPlan(readFormData());
+  void renderPlan(readFormData());
 });
 
 askButton.addEventListener("click", () => {
@@ -466,4 +668,4 @@ if (darkModeToggle) {
 // Initialize
 hydrateSavedForm();
 initDarkMode();
-renderPlan(readFormData());
+void renderPlan(readFormData());
